@@ -3,6 +3,10 @@
 
 @author Saboteur7
 @Date 2023/11/19
+
+@modifier Leopold Hu
+@Date 2023/12/31
+格式化文本，在飞书聊天窗口以富文本方式展示
 """
 
 # -*- coding=utf-8 -*-
@@ -58,6 +62,7 @@ class FeiShuChanel(ChatChannel):
             "Content-Type": "application/json",
         }
         msg_type = "text"
+        logger.info(f"access_token={msg.access_token}")
         logger.info(f"[FeiShu] start send reply message, type={context.type}, content={reply.content}")
         reply_content = reply.content
         content_key = "text"
@@ -69,23 +74,51 @@ class FeiShuChanel(ChatChannel):
                 return
             msg_type = "image"
             content_key = "image_key"
+            #logger.info(f"response={response.text}")
+        else:
+            reply_content = json.dumps({
+                'content': json.dumps({
+                    'elements': [
+                        {
+                            'tag': 'div',
+                            'text': {
+                                'content': reply_content,
+                                'tag': 'lark_md'
+                            }
+                        }
+                    ]
+                }),
+                'msg_type': 'interactive',
+                'receive_id': context.get("receiver"),
+            })
         if is_group:
             # 群聊中直接回复
             url = f"https://open.feishu.cn/open-apis/im/v1/messages/{msg.msg_id}/reply"
-            data = {
-                "msg_type": msg_type,
-                "content": json.dumps({content_key: reply_content})
-            }
-            res = requests.post(url=url, headers=headers, json=data, timeout=(5, 10))
+            if reply.type == ReplyType.IMAGE_URL:
+                data = {
+                    "msg_type": msg_type,
+                   "content": json.dumps({content_key: reply_content})
+                }
+                res = requests.post(url=url, headers=headers, json=data, timeout=(5, 10))
+            else :
+                data = reply_content
+                res = requests.post(url=url, headers=headers, data=data, timeout=(5, 10))
         else:
             url = "https://open.feishu.cn/open-apis/im/v1/messages"
             params = {"receive_id_type": context.get("receive_id_type")}
-            data = {
-                "receive_id": context.get("receiver"),
-                "msg_type": msg_type,
-                "content": json.dumps({content_key: reply_content})
-            }
-            res = requests.post(url=url, headers=headers, params=params, json=data, timeout=(5, 10))
+            if reply.type == ReplyType.IMAGE_URL:
+                data = {
+                    "receive_id": context.get("receiver"),
+                    "msg_type": msg_type,
+                    "content": json.dumps({content_key: reply_content})
+                }
+                res = requests.post(url=url, headers=headers, params=params, json=data, timeout=(5, 10))
+            else:
+                data = reply_content
+                #logger.info(f"data={data}")
+                #logger.info(f"headers={headers}")
+                #logger.info(f"params={params}")
+                res = requests.post(url=url, headers=headers, params=params, data=data, timeout=(5, 10))
         res = res.json()
         if res.get("code") == 0:
             logger.info(f"[FeiShu] send message success")
